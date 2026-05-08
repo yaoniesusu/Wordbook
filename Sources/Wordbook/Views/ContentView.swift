@@ -40,7 +40,7 @@ struct ContentView: View {
             sidebar(filteredEntries: entries)
                 .navigationSplitViewColumnWidth(min: 260, ideal: 290, max: 400)
         } detail: {
-            detailPane
+            detailPane.id(selection)
         }
         .toolbar {
             ToolbarItem(placement: .navigation) {

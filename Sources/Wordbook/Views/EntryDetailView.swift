@@ -17,11 +17,16 @@ struct EntryDetailView: View {
             if draft != nil {
                 detailContent
             } else {
-                UnavailablePlaceholderView("找不到条目", systemImage: "exclamationmark.triangle")
+                VStack(spacing: 16) {
+                    ProgressView()
+                    Text("加载中…")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
-        .onAppear { reloadFromStore() }
-        .onChange(of: entryId) { _ in reloadFromStore() }
+        .task(id: entryId) { reloadFromStore() }
         .onChange(of: store.entryVersion(for: entryId)) { _ in
             syncFromStore(store.entry(id: entryId), resetTransientState: false)
         }
