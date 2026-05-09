@@ -115,8 +115,8 @@ final class WordbookStore: ObservableObject {
         case .delete(let deletedEntries):
             entries.append(contentsOf: deletedEntries)
             sortEntries()
-            for entry in deletedEntries where entryVersions[entry.id] == nil {
-                entryVersions[entry.id] = 0
+            for entry in deletedEntries {
+                entryVersions[entry.id] = 1
             }
             rebuildIndexesAndInvalidateCaches()
             setNotice("已撤销删除")
@@ -379,11 +379,12 @@ final class WordbookStore: ObservableObject {
             setError("导入数据包含异常日期，已拒绝。")
             return
         }
+        undoStack.removeAll()
         entries = imported.sorted { $0.createdAt > $1.createdAt }
         resetEntryVersions()
         rebuildIndexesAndInvalidateCaches()
         setNotice("已导入 \(imported.count) 条词条")
-        saveImmediately()
+        save()
     }
 
     var allTags: [String] {
@@ -426,7 +427,9 @@ final class WordbookStore: ObservableObject {
         let calendar = Calendar.current
         let today = calendar.startOfDay(for: Date())
         return (0..<7).map { daysAgo in
-            let date = calendar.date(byAdding: .day, value: -daysAgo, to: today)!
+            guard let date = calendar.date(byAdding: .day, value: -daysAgo, to: today) else {
+                return DayReviewData(date: today, label: "", count: 0)
+            }
             let count = entries.filter { entry in
                 guard let reviewed = entry.lastReviewedAt else { return false }
                 return calendar.isDate(reviewed, inSameDayAs: date)
@@ -486,11 +489,13 @@ final class WordbookStore: ObservableObject {
         let totalEntries = entries.count
         var masteredEntries = 0
         var favoriteEntries = 0
+        var neverReviewedCount = 0
         var newTodayCount = 0
         var reviewedTodayCount = 0
         for entry in entries {
             if entry.isMastered { masteredEntries += 1 }
             if entry.isFavorite { favoriteEntries += 1 }
+            if entry.reviewCount == 0 && entry.lastReviewedAt == nil { neverReviewedCount += 1 }
             if calendar.isDate(entry.createdAt, inSameDayAs: now) { newTodayCount += 1 }
             if let r = entry.lastReviewedAt, calendar.isDate(r, inSameDayAs: now) { reviewedTodayCount += 1 }
         }
@@ -503,6 +508,7 @@ final class WordbookStore: ObservableObject {
             totalEntries: totalEntries,
             masteredEntries: masteredEntries,
             unmasteredEntries: unmasteredEntries,
+            neverReviewedCount: neverReviewedCount,
             favoriteEntries: favoriteEntries,
             dueTodayCount: dueTodayCount,
             newTodayCount: newTodayCount,

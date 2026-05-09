@@ -281,23 +281,28 @@ struct CompositeTranslationService: TranslationServicing {
         let uniqueValues = Set(normalizedResults.map { $0.1 })
 
         let confidence: TranslationConfidence
+        var consensusWinner: (String, String)?
         if uniqueValues.count >= 2 && results.count >= 2 {
-            // 检查是否有至少2个相同的结果
             let mostCommon = mostFrequentValue(in: normalizedResults.map { $0.1 })
             if mostCommon.count >= 2 {
                 confidence = .high
-                // 返回最一致的翻译原文
-                let winner = results.first { $0.1.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == mostCommon.value }!
-                return TranslationResult(text: winner.1, sourceName: "\(results.count)源一致", confidence: confidence)
+                if let winner = results.first(where: { $0.1.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == mostCommon.value }) {
+                    consensusWinner = (winner.0, winner.1)
+                }
+            } else {
+                confidence = .medium
             }
-            confidence = .medium
         } else if results.count >= 2 {
             confidence = .high
         } else {
             confidence = .medium
         }
 
-        let first = results.first!
+        if let winner = consensusWinner {
+            return TranslationResult(text: winner.1, sourceName: "\(results.count)源一致", confidence: confidence)
+        }
+
+        guard let first = results.first else { throw TranslationServiceError.emptyTranslation }
         return TranslationResult(text: first.1, sourceName: first.0, confidence: confidence)
     }
 
@@ -321,7 +326,10 @@ private func withTimeout<T>(_ seconds: TimeInterval, operation: @escaping () asy
             try await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
             throw TranslationServiceError.serverMessage("timeout")
         }
-        let result = try await group.next()!
+        guard let result = try await group.next() else {
+            group.cancelAll()
+            throw TranslationServiceError.serverMessage("timeout")
+        }
         group.cancelAll()
         return result
     }

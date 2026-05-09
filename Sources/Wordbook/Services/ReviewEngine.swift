@@ -40,7 +40,7 @@ enum ReviewEngine {
     static func updatedEasinessFactor(current: Double, quality: Int) -> Double {
         let q = Double(quality)
         let delta = 0.1 - (5.0 - q) * (0.08 + (5.0 - q) * 0.02)
-        return max(1.3, current + delta)
+        return min(2.5, max(1.3, current + delta))
     }
 
     /// 应用 SM-2 复习结果，返回更新后的词条。

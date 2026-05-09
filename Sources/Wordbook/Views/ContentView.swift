@@ -76,6 +76,9 @@ struct ContentView: View {
             }
         }
         .searchable(text: $searchText, prompt: "搜索英文、中文、标签或来源")
+        .onReceive(NotificationCenter.default.publisher(for: .showManualEntry)) { _ in
+            showManualEntry = true
+        }
         .preferredColorScheme(appearanceMode.colorScheme)
         .sheet(isPresented: $showManualEntry) { ManualEntrySheet(isPresented: $showManualEntry).environmentObject(store) }
         .sheet(isPresented: $showStats) { StatsView(isPresented: $showStats).environmentObject(store) }
@@ -301,7 +304,7 @@ struct ContentView: View {
     private func debounceSearch(_ value: String) {
         pendingSearchTask?.cancel()
         pendingSearchTask = Task {
-            try? await Task.sleep(nanoseconds: 180_000_000)
+            try? await Task.sleep(nanoseconds: 250_000_000)
             guard !Task.isCancelled else { return }
             await MainActor.run {
                 debouncedSearchText = value
@@ -365,6 +368,7 @@ private final class ReviewWindowPresenter: NSObject, NSWindowDelegate {
         window.minSize = NSSize(width: 620, height: 500)
         recenter(window)
 
+        window.delegate = self
         self.window = window
         window.alphaValue = 0
         NSApp.activate(ignoringOtherApps: true)

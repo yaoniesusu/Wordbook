@@ -76,7 +76,7 @@ struct StatsView: View {
         let data: [(String, Int, Color)] = [
             ("已掌握", stats.masteredEntries, .green),
             ("学习中", stats.unmasteredEntries, .orange),
-            ("未复习", max(0, stats.totalEntries - stats.masteredEntries - stats.unmasteredEntries), .gray)
+            ("未复习", stats.neverReviewedCount, .gray)
         ]
         return Chart(data, id: \.0) { item in
             BarMark(x: .value("分类", item.0), y: .value("数量", item.1))

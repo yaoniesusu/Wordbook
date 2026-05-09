@@ -2,6 +2,42 @@ import SwiftUI
 
 import AppKit
 
+private enum ReviewMode: String, CaseIterable {
+    case normal, reverse, spelling, cloze
+    var title: String {
+        switch self {
+        case .normal: return "正常"
+        case .reverse: return "反向"
+        case .spelling: return "拼写"
+        case .cloze: return "挖空"
+        }
+    }
+    var systemImage: String {
+        switch self {
+        case .normal: return "textformat"
+        case .reverse: return "arrow.left.arrow.right"
+        case .spelling: return "pencil"
+        case .cloze: return "rectangle.fill.badge.person.crop"
+        }
+    }
+    var helpText: String {
+        switch self {
+        case .normal: return "看英文，想中文"
+        case .reverse: return "反向：看中文想英文"
+        case .spelling: return "拼写模式：看中文，打出英文"
+        case .cloze: return "挖空模式：从例句填空回忆单词"
+        }
+    }
+    var progressHint: String {
+        switch self {
+        case .normal: return "看英文，翻答案，再选择记忆程度。"
+        case .reverse: return "看中文，回忆英文，再选择记忆程度。"
+        case .spelling: return "看中文，拼写英文，再评分记忆程度。"
+        case .cloze: return "根据上下文填空，再评分记忆程度。"
+        }
+    }
+}
+
 /// 从未掌握池中取最多 5 条，支持模糊显示与四档复习反馈。
 struct DailyReviewView: View {
     @EnvironmentObject private var store: WordbookStore
@@ -25,6 +61,13 @@ struct DailyReviewView: View {
     @FocusState private var spellingFocused: Bool
     @State private var suppressInitialAnimation = true
 
+    private var reviewMode: ReviewMode {
+        if clozeMode { return .cloze }
+        if spellingMode { return .spelling }
+        if reverseReview { return .reverse }
+        return .normal
+    }
+
     var body: some View {
         VStack(spacing: AppTheme.Space.large) {
             HStack {
@@ -46,26 +89,33 @@ struct DailyReviewView: View {
                     .pickerStyle(.segmented)
                     .labelsHidden()
                     .frame(width: 120)
+                    Picker("模式", selection: Binding<ReviewMode>(
+                        get: { reviewMode },
+                        set: { newMode in
+                            reverseReview = false
+                            spellingMode = false
+                            clozeMode = false
+                            switch newMode {
+                            case .reverse: reverseReview = true
+                            case .spelling: spellingMode = true
+                            case .cloze: clozeMode = true
+                            case .normal: break
+                            }
+                        }
+                    )) {
+                        ForEach(ReviewMode.allCases, id: \.self) { mode in
+                            Label(mode.title, systemImage: mode.systemImage).tag(mode)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    .frame(width: 140)
+                    .help(reviewMode.helpText)
                     Toggle(isOn: $shuffleReview) {
                         Image(systemName: "shuffle")
                     }
                     .toggleStyle(.button)
                     .help("随机顺序")
-                    Toggle(isOn: $reverseReview) {
-                        Image(systemName: "arrow.left.arrow.right")
-                    }
-                    .toggleStyle(.button)
-                    .help("反向：看中文想英文")
-                    Toggle(isOn: $spellingMode) {
-                        Image(systemName: "pencil")
-                    }
-                    .toggleStyle(.button)
-                    .help("拼写模式：看中文，打出英文")
-                    Toggle(isOn: $clozeMode) {
-                        Image(systemName: "rectangle.fill.badge.person.crop")
-                    }
-                    .toggleStyle(.button)
-                    .help("挖空模式：从例句填空回忆单词")
                 }
                 Button("关闭") { closeReview() }
             }
@@ -83,17 +133,10 @@ struct DailyReviewView: View {
         .background(Color(nsColor: .windowBackgroundColor))
         .background(keyboardCapture)
         .onAppear {
-            batch = store.dueReviewBatch(count: reviewBatchSize)
-            if shuffleReview { batch.shuffle() }
-            index = 0
-            completedCount = 0
-            outcomeCounts = [:]
-            lastFeedback = nil
-            isAdvancing = false
-            reveal = !fuzzyRecallEnabled
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-                suppressInitialAnimation = false
-            }
+            loadBatch()
+        }
+        .onChange(of: reviewBatchSize) { _ in
+            loadBatch()
         }
         .animation(suppressInitialAnimation ? nil : .easeInOut(duration: 0.18), value: reveal)
         .animation(suppressInitialAnimation ? nil : .easeInOut(duration: 0.16), value: isAdvancing)
@@ -103,7 +146,7 @@ struct DailyReviewView: View {
     private func reviewCard(_ current: VocabularyEntry) -> some View {
         VStack(spacing: AppTheme.Space.large) {
             VStack(spacing: AppTheme.Space.large) {
-                if clozeMode {
+            if reviewMode == .cloze {
                     let clozeSentence = current.exampleSentence.isEmpty
                         ? current.english
                         : current.exampleSentence.replacingOccurrences(of: current.english, with: "_____", options: .caseInsensitive)
@@ -156,8 +199,7 @@ struct DailyReviewView: View {
                             .surfaceCard(cornerRadius: AppTheme.Radius.panel, material: .thinMaterial)
                         }
                     }
-                } else if spellingMode {
-                    // 拼写模式：看中文 + 听发音，输入英文
+            } else if reviewMode == .spelling {
                     Text(current.chinese.isEmpty ? "（无中文）" : current.chinese)
                         .font(.system(size: 28, weight: .semibold, design: .rounded))
                         .multilineTextAlignment(.center)
@@ -198,8 +240,7 @@ struct DailyReviewView: View {
                         .padding(8)
                         .surfaceCard(cornerRadius: AppTheme.Radius.panel, material: .thinMaterial)
                     }
-                } else if reverseReview {
-                    // 反向模式：看中文，回忆英文
+            } else if reviewMode == .reverse {
                     VStack(spacing: 14) {
                         Text(current.chinese.isEmpty ? "（无中文）" : current.chinese)
                             .font(.system(size: 28, weight: .semibold, design: .rounded))
@@ -231,8 +272,7 @@ struct DailyReviewView: View {
                         }
                     }
                     .frame(maxWidth: .infinity)
-                } else {
-                    // 正向模式：看英文，回忆中文
+            } else {
                     HStack(alignment: .firstTextBaseline, spacing: 12) {
                         Text(current.english)
                             .font(.system(size: 32, weight: .semibold, design: .rounded))
@@ -285,7 +325,7 @@ struct DailyReviewView: View {
             HStack {
                 Button("上一条") { step(-1) }.disabled(index == 0)
                 Spacer()
-                Text("\(index + 1) / \(completedCount + batch.count)")
+            Text("\(index + 1) / \(batch.count)  ·  已完成 \(completedCount)")
                     .font(.body.weight(.semibold))
                     .monospacedDigit()
                     .foregroundStyle(.secondary)
@@ -301,7 +341,7 @@ struct DailyReviewView: View {
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }
 
-            if !spellingMode && !clozeMode {
+        if reviewMode == .normal || reviewMode == .reverse {
                 HStack(spacing: AppTheme.Space.small) {
                     scoreButton("1 没记住", systemImage: "xmark.circle", tint: .red, outcome: .forgot)
                     scoreButton("2 模糊", systemImage: "questionmark.circle", tint: .orange, outcome: .hard)
@@ -359,7 +399,7 @@ struct DailyReviewView: View {
         if batch.isEmpty {
             return completedCount == 0 ? "今天暂时没有到期任务。" : "本组已完成。"
         }
-        return "看英文，翻答案，再选择记忆程度。"
+        return reviewMode.progressHint
     }
 
     private func scoreButton(_ title: String, systemImage: String, tint: Color, outcome: ReviewOutcome) -> some View {
@@ -410,11 +450,26 @@ struct DailyReviewView: View {
         dismiss()
     }
 
+    private func loadBatch() {
+        batch = store.dueReviewBatch(count: reviewBatchSize)
+        if shuffleReview { batch.shuffle() }
+        index = 0
+        completedCount = 0
+        outcomeCounts = [:]
+        lastFeedback = nil
+        isAdvancing = false
+        reveal = !fuzzyRecallEnabled
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+            suppressInitialAnimation = false
+        }
+    }
+
     private func record(_ entry: VocabularyEntry, outcome: ReviewOutcome) {
         guard !isAdvancing else { return }
         store.review(entry, outcome: outcome)
         outcomeCounts[outcome, default: 0] += 1
-        lastFeedback = feedbackText(for: outcome)
+        let feedback = feedbackText(for: outcome)
+        lastFeedback = feedback
         completedCount += 1
 
         withAnimation {
@@ -430,7 +485,6 @@ struct DailyReviewView: View {
             withAnimation {
                 batch.removeAll { $0.id == entry.id }
                 if batch.isEmpty {
-                    // 尝试补充下一批
                     let next = store.dueReviewBatch(count: reviewBatchSize)
                     if next.isEmpty {
                         // 确实没词了
@@ -448,7 +502,7 @@ struct DailyReviewView: View {
         }
 
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
-            lastFeedback = nil
+            if lastFeedback == feedback { lastFeedback = nil }
         }
     }
 
@@ -486,6 +540,7 @@ struct DailyReviewView: View {
             isPresented = false
         case .score(let outcome):
             guard !batch.isEmpty else { return }
+            if (reviewMode == .spelling || reviewMode == .cloze), spellingFocused { return }
             if fuzzyRecallEnabled && !reveal {
                 withAnimation(.easeOut(duration: 0.18)) { reveal = true }
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {

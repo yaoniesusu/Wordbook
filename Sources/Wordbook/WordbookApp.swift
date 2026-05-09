@@ -1,5 +1,9 @@
 import SwiftUI
 
+extension Notification.Name {
+    static let showManualEntry = Notification.Name("showManualEntry")
+}
+
 @main
 struct WordbookApp: App {
     @StateObject private var store = WordbookStore()
@@ -33,7 +37,7 @@ struct WordbookApp: App {
         .commands {
             CommandMenu("文件") {
                 Button("手动新增") {
-                    store.noticeMessage = "请点击工具栏的 + 按钮"
+                    NotificationCenter.default.post(name: .showManualEntry, object: nil)
                 }
                 .keyboardShortcut("n", modifiers: .command)
                 Divider()

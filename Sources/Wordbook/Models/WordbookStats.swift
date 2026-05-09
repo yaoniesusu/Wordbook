@@ -4,6 +4,7 @@ struct WordbookStats {
     let totalEntries: Int
     let masteredEntries: Int
     let unmasteredEntries: Int
+    let neverReviewedCount: Int
     let favoriteEntries: Int
     let dueTodayCount: Int
     let newTodayCount: Int

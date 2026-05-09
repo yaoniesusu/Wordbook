@@ -25,10 +25,11 @@ struct ManualEntrySheet: View {
                     TextField("例句 / 上下文", text: $exampleSentence, axis: .vertical)
                         .lineLimit(3 ... 8)
                 }
-                Section("分类") {
-                    TextField("标签（逗号分隔）", text: $tags)
-                    TextField("来源", text: $source)
-                }
+            Section("分类") {
+                TextField("标签（逗号分隔）", text: $tags)
+                tagSuggestions
+                TextField("来源", text: $source)
+            }
             }
             .formStyle(.grouped)
             .navigationTitle("手动新增")
@@ -53,6 +54,34 @@ struct ManualEntrySheet: View {
     private var canSave: Bool {
         !english.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
         !chinese.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    @ViewBuilder
+    private var tagSuggestions: some View {
+        let input = tags.components(separatedBy: ",").last?.trimmingCharacters(in: .whitespaces) ?? ""
+        if input.isEmpty { EmptyView() }
+        let suggestions = store.allTags.filter { $0.localizedCaseInsensitiveContains(input) && !tags.contains($0) }.prefix(6)
+        if !suggestions.isEmpty {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 6) {
+                    ForEach(suggestions, id: \.self) { tag in
+                        Button {
+                            var parts = tags.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }
+                            if !parts.isEmpty { parts[parts.count - 1] = tag }
+                            tags = parts.joined(separator: ", ") + ", "
+                        } label: {
+                            Text(tag)
+                                .font(.callout)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                                .background(Color.accentColor.opacity(0.12), in: Capsule())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(.vertical, 4)
+            }
+        }
     }
 
     private func save() {

@@ -96,7 +96,7 @@ struct EntryDetailView: View {
             }
 
             HStack(spacing: 16) {
-                metadataLabel((draft?.isMastered ?? false) ? "已掌握" : "学习中", systemImage: (draft?.isMastered ?? false) ? "checkmark.seal.fill" : "book")
+                metadataLabel(statusLabel, systemImage: statusIcon)
                 if draft?.isFavorite == true {
                     metadataLabel("收藏", systemImage: "star.fill")
                 }
@@ -318,6 +318,19 @@ struct EntryDetailView: View {
         .insetPill(cornerRadius: AppTheme.Radius.medium, tint: .accentColor, isActive: !(draft?.chinese.isEmpty ?? true))
     }
 
+    private var statusLabel: String {
+        guard let d = draft else { return "学习中" }
+        if d.isMastered { return "已掌握" }
+        if d.reviewCount == 0 && d.lastReviewedAt == nil { return "未复习" }
+        return "学习中"
+    }
+    private var statusIcon: String {
+        guard let d = draft else { return "book" }
+        if d.isMastered { return "checkmark.seal.fill" }
+        if d.reviewCount == 0 && d.lastReviewedAt == nil { return "leaf" }
+        return "book"
+    }
+
     private var primaryTitle: String {
         draft?.english.isEmpty == false ? draft?.english ?? "" : "未命名词条"
     }
@@ -362,6 +375,7 @@ struct EntryDetailView: View {
     }
 
     private func reloadFromStore() {
+        if hasUnsavedChanges { persist() }
         syncFromStore(store.entry(id: entryId), resetTransientState: true)
     }
 

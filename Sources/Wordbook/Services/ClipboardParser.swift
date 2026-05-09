@@ -351,7 +351,7 @@ enum ClipboardParser {
         if looksLikeNoise(trimmed) || looksLikeGarbledText(trimmed) { return false }
         if tokenCount(in: trimmed) > 6 { return false }
         if trimmed.range(of: "[0-9_{}\\[\\]<>`=;|\\\\/]", options: .regularExpression) != nil { return false }
-        let allowed = "^[A-Za-z][A-Za-z '\\u{2019}.-]*[A-Za-z.]$"
+        let allowed = "^[A-Za-z][A-Za-z '\\u{2019}.-]*[A-Za-z.'\\u{2019}]$"
         return trimmed.range(of: allowed, options: .regularExpression) != nil
     }
 
