@@ -7,7 +7,7 @@ struct EntryListView: View {
     var searchText: String
     let entries: [VocabularyEntry]
     @State private var pendingDeletion: VocabularyEntry?
-    @State private var editMode = false
+    @Binding var editMode: Bool
     @State private var selectedIDs = Set<UUID>()
 
     var body: some View {
@@ -88,7 +88,8 @@ struct EntryListView: View {
     }
 
     private func row(_ entry: VocabularyEntry) -> some View {
-        HStack(spacing: AppTheme.Space.small) {
+        let isNew = store.highlightedEntryIDs.contains(entry.id)
+        return HStack(spacing: AppTheme.Space.small) {
             if editMode {
                 Image(systemName: selectedIDs.contains(entry.id) ? "checkmark.circle.fill" : "circle")
                     .font(.system(size: 14, weight: .medium))
@@ -99,7 +100,7 @@ struct EntryListView: View {
             Circle()
                 .fill(familiarityColor(for: entry))
                 .frame(width: AppTheme.Size.statusDot, height: AppTheme.Size.statusDot)
-                .accessibilityHidden(true)
+                .accessibilityLabel(familiarityLabel(for: entry))
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: AppTheme.Space.xSmall) {
                     Text(entry.english)
@@ -132,6 +133,11 @@ struct EntryListView: View {
         }
         .frame(minHeight: AppTheme.Size.sidebarRowHeight, alignment: .center)
         .padding(.vertical, 3)
+        .background(
+            RoundedRectangle(cornerRadius: AppTheme.Radius.row, style: .continuous)
+                .fill(Color.accentColor.opacity(isNew ? 0.12 : 0))
+        )
+        .animation(.easeOut(duration: 0.6), value: isNew)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(entry.english), \(entry.chinese)")
     }
@@ -205,6 +211,17 @@ struct EntryListView: View {
         case 7:  return Color(red: 0.20, green: 0.60, blue: 0.55)
         case 8:  return Color(red: 0.15, green: 0.55, blue: 0.60)
         default: return Color(red: 0.10, green: 0.50, blue: 0.55)
+        }
+    }
+
+    private func familiarityLabel(for entry: VocabularyEntry) -> String {
+        if entry.isMastered { return "已掌握" }
+        switch entry.reviewCount {
+        case 0:  return "未复习"
+        case 1, 2: return "初学"
+        case 3, 4: return "熟悉中"
+        case 5, 6: return "较熟练"
+        default: return "很熟练"
         }
     }
 }

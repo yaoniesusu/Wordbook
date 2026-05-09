@@ -22,11 +22,13 @@ struct ContentView: View {
     @State private var showStats = false
     @State private var showImporter = false
     @State private var showExporter = false
-    @State private var showSettings = false
     @State private var isAddingFromClipboard = false
     @State private var toast: ToastState?
     @StateObject private var konami = KonamiWatcher()
     @State private var showClearConfirmation = false
+    @State private var sidebarEditMode = false
+    @State private var newlyAddedIDs: Set<UUID> = []
+    @AppStorage("hasSeenOnboarding") private var hasSeenOnboarding = false
 
     var body: some View {
         macBody
@@ -66,10 +68,10 @@ struct ContentView: View {
                 Button { showManualEntry = true } label: { Label("手动新增", systemImage: "plus") }
                 Button { showReviewWindow() } label: { Label("复习", systemImage: "calendar") }
                 Button { showStats = true } label: { Label("统计", systemImage: "chart.bar") }
-                Button { showSettings = true } label: { Label("设置", systemImage: "gearshape") }
+                Button {
+                    NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
+                } label: { Label("设置", systemImage: "gearshape") }
                 Menu {
-                    Button("设置与数据") { showSettings = true }
-                    Divider()
                     Button("导入 JSON") { showImporter = true }
                     Button("导出 JSON") { openExporter() }
                 } label: { Label("更多", systemImage: "ellipsis.circle") }
@@ -82,22 +84,19 @@ struct ContentView: View {
         .preferredColorScheme(appearanceMode.colorScheme)
         .sheet(isPresented: $showManualEntry) { ManualEntrySheet(isPresented: $showManualEntry).environmentObject(store) }
         .sheet(isPresented: $showStats) { StatsView(isPresented: $showStats).environmentObject(store) }
-        .sheet(isPresented: $showSettings) {
-            AppSettingsView(
-                isPresented: $showSettings,
-                clipboardAutoCaptureEnabled: $clipboardAutoCaptureEnabled,
-                defaultClipboardSource: $defaultClipboardSource,
-                defaultClipboardTags: $defaultClipboardTags,
-                autoTranslationEnabled: $autoTranslationEnabled,
-                dictionaryEnhancementEnabled: $dictionaryEnhancementEnabled,
-                preferCachedDefinitions: $preferCachedDefinitions,
-                showImporter: $showImporter, openExporter: openExporter
-            ).environmentObject(store)
-        }
         .fileImporter(isPresented: $showImporter, allowedContentTypes: [.json]) { handleImport($0) }
         .fileExporter(isPresented: $showExporter, document: exportDocument, contentType: .json, defaultFilename: "wordbook-export") { handleExport($0) }
         .modifier(KonamiModifier(konami: konami, store: store, showClearConfirmation: $showClearConfirmation, selection: $selection))
         .onAppear { store.setClipboardAutoCaptureEnabled(clipboardAutoCaptureEnabled); konami.start() }
+        .sheet(isPresented: Binding(
+            get: { !hasSeenOnboarding },
+            set: { if !$0 { hasSeenOnboarding = true } }
+        )) {
+            OnboardingView(isPresented: Binding(
+                get: { !hasSeenOnboarding },
+                set: { if !$0 { hasSeenOnboarding = true } }
+            ))
+        }
         .onDisappear { konami.stop() }
         .onChange(of: clipboardAutoCaptureEnabled) { store.setClipboardAutoCaptureEnabled($0) }
         .onChange(of: searchText) { debounceSearch($0) }
@@ -120,8 +119,20 @@ struct ContentView: View {
     private func sidebar(filteredEntries: [VocabularyEntry]) -> some View {
         VStack(spacing: 0) {
             VStack(alignment: .leading, spacing: AppTheme.Space.small) {
-                Text("单词本")
-                    .font(.title3.weight(.semibold))
+                HStack {
+                    Text("单词本")
+                        .font(.title3.weight(.semibold))
+                    Spacer()
+                    Button {
+                        withAnimation(.spring(response: 0.28, dampingFraction: 0.86)) {
+                            sidebarEditMode.toggle()
+                        }
+                    } label: {
+                        Label(sidebarEditMode ? "完成" : "选择", systemImage: sidebarEditMode ? "checkmark" : "checklist")
+                    }
+                    .buttonStyle(.borderless)
+                    .help(sidebarEditMode ? "退出批量操作" : "批量选择与操作")
+                }
                 Picker("筛选", selection: $filter) {
                     ForEach(EntryFilter.allCases) { f in
                         Text(f.title).tag(f)
@@ -140,18 +151,40 @@ struct ContentView: View {
             .padding(.horizontal, AppTheme.Space.large)
             .padding(.vertical, AppTheme.Space.medium)
 
-            sidebarProgressCard(stats: store.stats())
+            Button {
+                showReviewWindow()
+            } label: {
+                sidebarProgressCard(stats: store.stats())
+            }
+            .buttonStyle(.plain)
+            .padding(.horizontal, AppTheme.Space.large)
+            .padding(.bottom, AppTheme.Space.medium)
+
+            if hasSearch {
+                HStack(spacing: 4) {
+                    Image(systemName: "magnifyingglass")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Text("搜到 \(filteredEntries.count) 条")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                }
                 .padding(.horizontal, AppTheme.Space.large)
-                .padding(.bottom, AppTheme.Space.medium)
+                .padding(.bottom, AppTheme.Space.xSmall)
+                .transition(.opacity)
+            }
 
             EntryListView(
                 selection: $selection,
                 filter: filter,
                 searchText: debouncedSearchText,
-                entries: filteredEntries
+                entries: filteredEntries,
+                editMode: $sidebarEditMode
             )
             .environmentObject(store)
         }
+        .animation(.spring(response: 0.28, dampingFraction: 0.86), value: hasSearch)
     }
 
     @AppStorage(UserDefaultsKey.dailyReviewGoal.rawValue) private var dailyReviewGoal = 10
@@ -214,7 +247,7 @@ struct ContentView: View {
     @ViewBuilder
     private var detailPane: some View {
         if let id = selection {
-            EntryDetailView(entryId: id)
+            EntryDetailView(entryId: id, onEntryDeleted: { selection = nil })
                 .environmentObject(store)
         } else {
             TodayLearningOverview(
@@ -229,6 +262,8 @@ struct ContentView: View {
     private var filteredEntries: [VocabularyEntry] {
         store.filteredEntries(filter: filter, query: debouncedSearchText, sortOrder: sortOrder)
     }
+
+    private var hasSearch: Bool { !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
 
     private var exportDocument: WordbookEntriesDocument {
         let data = (try? store.exportEntriesData()) ?? Data("[]".utf8)
@@ -431,6 +466,7 @@ private struct TodayLearningOverview: View {
     @Binding var selection: UUID?
     let startReview: () -> Void
     @Binding var showManualEntry: Bool
+    @ScaledMetric private var titleSize: CGFloat = 32
 
     var body: some View {
         let stats = store.stats()
@@ -444,7 +480,7 @@ private struct TodayLearningOverview: View {
             HStack(alignment: .center) {
                 VStack(alignment: .leading, spacing: AppTheme.Space.small) {
                     Text("今日学习")
-                        .font(.system(size: 32, weight: .semibold, design: .rounded))
+                        .font(.system(size: titleSize, weight: .semibold, design: .rounded))
                     Text("先清到期词，再回看难词，最后补新词。")
                         .font(.callout)
                         .foregroundStyle(.secondary)
@@ -605,98 +641,6 @@ private struct TodayLearningOverview: View {
     }
 }
 
-private struct AppSettingsView: View {
-    @EnvironmentObject private var store: WordbookStore
-    @Binding var isPresented: Bool
-    @Binding var clipboardAutoCaptureEnabled: Bool
-    @Binding var defaultClipboardSource: String
-    @Binding var defaultClipboardTags: String
-    @Binding var autoTranslationEnabled: Bool
-    @Binding var dictionaryEnhancementEnabled: Bool
-    @Binding var preferCachedDefinitions: Bool
-    @Binding var showImporter: Bool
-    let openExporter: () -> Void
-
-    var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 0) {
-                HStack {
-                    Text("设置与数据")
-                        .font(.title2.weight(.semibold))
-                    Spacer()
-                    Button("完成") { isPresented = false }
-                        .keyboardShortcut(.defaultAction)
-                }
-                .padding(24)
-
-                Divider()
-
-                VStack(alignment: .leading, spacing: 24) {
-                    VStack(alignment: .leading, spacing: 12) {
-                        Toggle("后台自动记录剪切板", isOn: $clipboardAutoCaptureEnabled)
-                        Text(ClipboardParser.autoIngestRulesDescription())
-                            .font(.callout)
-                            .foregroundStyle(.secondary)
-                        TextField("默认来源（如 Bob）", text: $defaultClipboardSource)
-                        TextField("默认标签（逗号分隔）", text: $defaultClipboardTags)
-                    }
-
-                    Divider()
-
-                    VStack(alignment: .leading, spacing: 12) {
-                        Toggle("自动补齐英文的中文翻译", isOn: $autoTranslationEnabled)
-                        Toggle("词典释义增强", isOn: $dictionaryEnhancementEnabled)
-                        Toggle("优先使用缓存释义", isOn: $preferCachedDefinitions)
-                        Text("启用词典释义增强后，会查询在线词典并缓存英文释义。")
-                            .font(.callout)
-                            .foregroundStyle(.secondary)
-                    }
-
-                    Divider()
-
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text("数据")
-                            .font(.headline)
-
-                        Button {
-                            let removed = store.removeNoiseEntries()
-                            if removed > 0 {
-                                store.noticeMessage = "已清理 \(removed) 条噪音词条"
-                            } else {
-                                store.noticeMessage = "没有发现噪音词条"
-                            }
-                        } label: {
-                            Label("清理噪音词条", systemImage: "eraser")
-                        }
-                        Text("删除误收入的纯中文、停用词、长句、产品编号、URL、代码等无效条目。")
-                            .font(.callout)
-                            .foregroundStyle(.secondary)
-
-                        HStack {
-                            Button("导入 JSON") {
-                                isPresented = false
-                                showImporter = true
-                            }
-                            Button("导出 JSON") {
-                                isPresented = false
-                                openExporter()
-                            }
-                        }
-                        Text("导入会覆盖当前列表；导出内容可原样作为迁移或备份。")
-                            .font(.callout)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                .textFieldStyle(.roundedBorder)
-                .padding(24)
-            }
-            .frame(width: 560)
-        }
-        .frame(maxHeight: 500)
-    }
-
-}
-
 enum SortOrder: String, CaseIterable, Identifiable {
     case newest, alphabetical, dueFirst
 
@@ -783,6 +727,88 @@ private struct KonamiModifier: ViewModifier {
             } message: {
                 Text("这将永久删除单词本中的全部词条，不可恢复。")
             }
+    }
+}
+
+private struct OnboardingView: View {
+    @Binding var isPresented: Bool
+
+    var body: some View {
+        VStack(spacing: 0) {
+            VStack(spacing: 20) {
+                Image(systemName: "text.book.closed.fill")
+                    .font(.system(size: 48))
+                    .foregroundStyle(.blue.gradient)
+                Text("欢迎使用单词本")
+                    .font(.title.weight(.bold))
+                Text("自动收录 + 间隔复习，轻松积累词汇")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.top, 40)
+
+            VStack(alignment: .leading, spacing: 20) {
+                featureRow(
+                    icon: "doc.on.clipboard",
+                    color: .blue,
+                    title: "剪切板自动收录",
+                    description: "复制任意英文单词或短语，应用会自动识别并收录。支持 Bob 格式（英文 + 中文）。"
+                )
+                featureRow(
+                    icon: "calendar.badge.clock",
+                    color: .orange,
+                    title: "间隔重复复习",
+                    description: "基于 SM-2 算法，在遗忘临界点安排复习。支持正常、反向、拼写、挖空四种模式。"
+                )
+                featureRow(
+                    icon: "plus.circle",
+                    color: .green,
+                    title: "手动添加词条",
+                    description: "点击 + 按钮手动录入，支持自动补齐翻译和词典释义。"
+                )
+                featureRow(
+                    icon: "gearshape",
+                    color: .gray,
+                    title: "随时调整设置",
+                    description: "在设置中可调整剪切板来源、每日复习目标、翻译开关等。"
+                )
+            }
+            .padding(.horizontal, 32)
+            .padding(.vertical, 28)
+
+            Spacer()
+
+            Button {
+                isPresented = false
+            } label: {
+                Text("开始使用")
+                    .font(.body.weight(.semibold))
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 12)
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.large)
+            .padding(.horizontal, 80)
+            .padding(.bottom, 32)
+        }
+        .frame(width: 520, height: 560)
+    }
+
+    private func featureRow(icon: String, color: Color, title: String, description: String) -> some View {
+        HStack(alignment: .top, spacing: 14) {
+            Image(systemName: icon)
+                .font(.system(size: 20, weight: .semibold))
+                .foregroundStyle(color)
+                .frame(width: 28, height: 28)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .font(.body.weight(.semibold))
+                Text(description)
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
     }
 }
 

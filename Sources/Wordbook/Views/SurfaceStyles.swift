@@ -108,6 +108,38 @@ struct InsetPillModifier: ViewModifier {
     }
 }
 
+/// 标签自动补全建议条：输入逗号分隔标签时显示匹配建议。
+struct TagSuggestionBar: View {
+    let tagsField: String
+    let allTags: [String]
+    let onSelect: (String) -> Void
+
+    var body: some View {
+        let input = tagsField.components(separatedBy: ",").last?.trimmingCharacters(in: .whitespaces) ?? ""
+        if input.isEmpty { EmptyView() }
+        let suggestions = allTags.filter { $0.localizedCaseInsensitiveContains(input) && !tagsField.contains($0) }.prefix(6)
+        if !suggestions.isEmpty {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 6) {
+                    ForEach(suggestions, id: \.self) { tag in
+                        Button {
+                            onSelect(tag)
+                        } label: {
+                            Text(tag)
+                                .font(.callout)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                                .background(Color.accentColor.opacity(0.12), in: Capsule())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(.vertical, 4)
+            }
+        }
+    }
+}
+
 extension View {
     func surfaceCard(
         cornerRadius: CGFloat = AppTheme.Radius.panel,

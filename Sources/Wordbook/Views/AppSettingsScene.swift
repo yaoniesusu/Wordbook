@@ -14,6 +14,7 @@ struct AppSettingsScene: View {
     @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
     @AppStorage(UserDefaultsKey.reviewReminderHour.rawValue) private var reviewReminderHour = 9
     @AppStorage(UserDefaultsKey.reviewReminderMinute.rawValue) private var reviewReminderMinute = 0
+    @AppStorage(UserDefaultsKey.dailyReviewGoal.rawValue) private var dailyReviewGoal = 10
     @State private var showImporter = false
 
     var body: some View {
@@ -30,6 +31,23 @@ struct AppSettingsScene: View {
                     .foregroundStyle(.secondary)
                 TextField("默认来源", text: $defaultClipboardSource)
                 TextField("默认标签（逗号分隔）", text: $defaultClipboardTags)
+
+                Divider()
+
+                HStack {
+                    Text("每日复习目标")
+                    Spacer()
+                    Picker("", selection: $dailyReviewGoal) {
+                        ForEach([3, 5, 10, 15, 20, 30, 50], id: \.self) { n in
+                            Text("\(n) 条").tag(n)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                    .labelsHidden()
+                }
+                Text("达到目标后侧边栏进度条会变绿。")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
 
                 Divider()
 

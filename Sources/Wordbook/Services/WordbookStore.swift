@@ -25,11 +25,57 @@ private struct CachedRecentReviewedEntries {
     let value: [VocabularyEntry]
 }
 
-private enum UndoAction {
+private enum UndoAction: Codable {
     case delete(entries: [VocabularyEntry])
     case update(old: VocabularyEntry, new: VocabularyEntry)
     case batchUpdate(changes: [(old: VocabularyEntry, new: VocabularyEntry)])
     case add(entry: VocabularyEntry)
+
+    private enum CodingKeys: String, CodingKey {
+        case type, entries, old, new, changes
+    }
+    private enum TypeTag: String, Codable {
+        case delete, update, batchUpdate, add
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        switch try c.decode(TypeTag.self, forKey: .type) {
+        case .delete:
+            self = .delete(entries: try c.decode([VocabularyEntry].self, forKey: .entries))
+        case .update:
+            self = .update(old: try c.decode(VocabularyEntry.self, forKey: .old),
+                           new: try c.decode(VocabularyEntry.self, forKey: .new))
+        case .batchUpdate:
+            self = .batchUpdate(changes: try c.decode([ChangeRecord].self, forKey: .changes).map { ($0.old, $0.new) })
+        case .add:
+            self = .add(entry: try c.decode(VocabularyEntry.self, forKey: .entries))
+        }
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        switch self {
+        case .delete(let entries):
+            try c.encode(TypeTag.delete, forKey: .type)
+            try c.encode(entries, forKey: .entries)
+        case .update(let old, let new):
+            try c.encode(TypeTag.update, forKey: .type)
+            try c.encode(old, forKey: .old)
+            try c.encode(new, forKey: .new)
+        case .batchUpdate(let changes):
+            try c.encode(TypeTag.batchUpdate, forKey: .type)
+            try c.encode(changes.map { ChangeRecord(old: $0.old, new: $0.new) }, forKey: .changes)
+        case .add(let entry):
+            try c.encode(TypeTag.add, forKey: .type)
+            try c.encode(entry, forKey: .entries)
+        }
+    }
+
+    private struct ChangeRecord: Codable {
+        let old: VocabularyEntry
+        let new: VocabularyEntry
+    }
 }
 
 /// 本地 JSON 持久化与词条 CRUD。拆分出 PersistenceController / ReviewEngine 后的协调层。
@@ -43,6 +89,7 @@ final class WordbookStore: ObservableObject {
     @Published var noticeMessage: String?
     @Published var errorMessage: String?
     @Published private(set) var translationMetadata: [UUID: TranslationResult] = [:]
+    @Published var highlightedEntryIDs: Set<UUID> = []
 
     private let persistence: PersistenceController
     private let pasteboardReader: PasteboardReading
@@ -101,6 +148,7 @@ final class WordbookStore: ObservableObject {
         load()
         loadHistory()
         loadDictionaryCache()
+        loadUndoStack()
         persistence.autoSnapshotIfNeeded(entries)
 
         let autoOn = clipboardEnabledOverride ?? (UserDefaults.standard.object(forKey: .clipboardAutoCaptureEnabled) as? Bool ?? true)
@@ -111,6 +159,7 @@ final class WordbookStore: ObservableObject {
 
     func undo() {
         guard let action = undoStack.popLast() else { return }
+        saveUndoStack()
         switch action {
         case .delete(let deletedEntries):
             entries.append(contentsOf: deletedEntries)
@@ -380,6 +429,7 @@ final class WordbookStore: ObservableObject {
             return
         }
         undoStack.removeAll()
+        saveUndoStack()
         entries = imported.sorted { $0.createdAt > $1.createdAt }
         resetEntryVersions()
         rebuildIndexesAndInvalidateCaches()
@@ -603,6 +653,7 @@ final class WordbookStore: ObservableObject {
                 source: sourceHint
             )
             entries.insert(e, at: 0)
+            highlightEntry(e.id)
             appendHistory(
                 english: e.english,
                 chinese: e.chinese,
@@ -1012,11 +1063,34 @@ final class WordbookStore: ObservableObject {
         persistence.saveHistory(ingestHistory)
     }
 
+    private func highlightEntry(_ id: UUID) {
+        highlightedEntryIDs.insert(id)
+        Task {
+            try? await Task.sleep(nanoseconds: 2_200_000_000)
+            highlightedEntryIDs.remove(id)
+        }
+    }
+
     private func pushUndo(_ action: UndoAction) {
         undoStack.append(action)
         if undoStack.count > maxUndoDepth {
             undoStack.removeFirst()
         }
+        saveUndoStack()
+    }
+
+    private func loadUndoStack() {
+        guard let data = persistence.loadUndoStackData() else { return }
+        do {
+            undoStack = try JSONDecoder().decode([UndoAction].self, from: data)
+        } catch {
+            // 旧格式或损坏，静默丢弃
+        }
+    }
+
+    private func saveUndoStack() {
+        guard let data = try? JSONEncoder().encode(undoStack) else { return }
+        persistence.saveUndoStackData(data)
     }
 
     private func setNotice(_ message: String) {

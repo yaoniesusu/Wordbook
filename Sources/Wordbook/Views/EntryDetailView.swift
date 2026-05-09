@@ -4,6 +4,7 @@ import SwiftUI
 struct EntryDetailView: View {
     @EnvironmentObject private var store: WordbookStore
     let entryId: UUID
+    var onEntryDeleted: (() -> Void)?
 
     @State private var draft: VocabularyEntry?
     @State private var savedDraft: VocabularyEntry?
@@ -11,6 +12,8 @@ struct EntryDetailView: View {
     @State private var showEditor = false
     @State private var showDeleteConfirmation = false
     @AppStorage("dictionaryEnhancementEnabled") private var dictionaryEnhancementEnabled = true
+    @ScaledMetric private var detailWordSize: CGFloat = 38
+    @ScaledMetric private var chineseDisplaySize: CGFloat = 26
 
     var body: some View {
         Group {
@@ -69,6 +72,7 @@ struct EntryDetailView: View {
         }
         .confirmationDialog("删除词条？", isPresented: $showDeleteConfirmation) {
             Button("删除此条", role: .destructive) {
+                onEntryDeleted?()
                 store.delete(ids: [entryId])
             }
             Button("取消", role: .cancel) {}
@@ -81,7 +85,7 @@ struct EntryDetailView: View {
         VStack(alignment: .leading, spacing: AppTheme.Space.large) {
             HStack(alignment: .firstTextBaseline, spacing: 12) {
                 Text(primaryTitle)
-                    .font(.system(size: 38, weight: .semibold, design: .rounded))
+                    .font(.system(size: detailWordSize, weight: .semibold, design: .rounded))
                     .textSelection(.enabled)
                     .lineLimit(3)
                     .minimumScaleFactor(0.72)
@@ -235,7 +239,7 @@ struct EntryDetailView: View {
                 if let chinese = draft?.chinese, !chinese.trimmingCharacters(in: .whitespaces).isEmpty {
                     VStack(alignment: .leading, spacing: 8) {
                         Text(chinese)
-                            .font(.system(size: 26, weight: .regular))
+                            .font(.system(size: chineseDisplaySize, weight: .regular))
                             .foregroundStyle(.primary)
                             .textSelection(.enabled)
                             .lineSpacing(8)
@@ -308,7 +312,7 @@ struct EntryDetailView: View {
     private var fallbackChineseText: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text((draft?.chinese.isEmpty ?? true) ? "暂无中文释义" : draft?.chinese ?? "")
-                .font(.system(size: 26, weight: .regular, design: .default))
+                .font(.system(size: chineseDisplaySize, weight: .regular, design: .default))
                 .foregroundStyle((draft?.chinese.isEmpty ?? true) ? .secondary : .primary)
                 .textSelection(.enabled)
                 .lineSpacing(8)
@@ -456,29 +460,10 @@ struct EntryDetailView: View {
 
     @ViewBuilder
     private var tagSuggestions: some View {
-        let input = tagsField.components(separatedBy: ",").last?.trimmingCharacters(in: .whitespaces) ?? ""
-        if input.isEmpty { EmptyView() }
-        let suggestions = store.allTags.filter { $0.localizedCaseInsensitiveContains(input) && !tagsField.contains($0) }.prefix(6)
-        if !suggestions.isEmpty {
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 6) {
-                    ForEach(suggestions, id: \.self) { tag in
-                        Button {
-                            var parts = tagsField.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }
-                            if !parts.isEmpty { parts[parts.count - 1] = tag }
-                            tagsField = parts.joined(separator: ", ") + ", "
-                        } label: {
-                            Text(tag)
-                                .font(.callout)
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 4)
-                                .background(Color.accentColor.opacity(0.12), in: Capsule())
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-                .padding(.vertical, 4)
-            }
+        TagSuggestionBar(tagsField: tagsField, allTags: store.allTags) { tag in
+            var parts = tagsField.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }
+            if !parts.isEmpty { parts[parts.count - 1] = tag }
+            tagsField = parts.joined(separator: ", ") + ", "
         }
     }
 

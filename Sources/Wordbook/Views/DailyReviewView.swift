@@ -60,6 +60,9 @@ struct DailyReviewView: View {
     @State private var spellingResult: Bool? = nil
     @FocusState private var spellingFocused: Bool
     @State private var suppressInitialAnimation = true
+    @ScaledMetric private var reviewWordSize: CGFloat = 32
+    @ScaledMetric private var reviewSecondarySize: CGFloat = 21
+    @ScaledMetric private var clozeSentenceSize: CGFloat = 24
 
     private var reviewMode: ReviewMode {
         if clozeMode { return .cloze }
@@ -155,7 +158,7 @@ struct DailyReviewView: View {
                             .font(.callout)
                             .foregroundStyle(.secondary)
                         Text(clozeSentence)
-                            .font(.system(size: 24, weight: .medium, design: .rounded))
+                            .font(.system(size: clozeSentenceSize, weight: .medium, design: .rounded))
                             .multilineTextAlignment(.center)
                             .lineLimit(3)
                             .minimumScaleFactor(0.72)
@@ -201,7 +204,7 @@ struct DailyReviewView: View {
                     }
             } else if reviewMode == .spelling {
                     Text(current.chinese.isEmpty ? "（无中文）" : current.chinese)
-                        .font(.system(size: 28, weight: .semibold, design: .rounded))
+                        .font(.system(size: reviewWordSize, weight: .semibold, design: .rounded))
                         .multilineTextAlignment(.center)
                         .lineLimit(3)
                         .minimumScaleFactor(0.72)
@@ -243,7 +246,7 @@ struct DailyReviewView: View {
             } else if reviewMode == .reverse {
                     VStack(spacing: 14) {
                         Text(current.chinese.isEmpty ? "（无中文）" : current.chinese)
-                            .font(.system(size: 28, weight: .semibold, design: .rounded))
+                            .font(.system(size: reviewWordSize, weight: .semibold, design: .rounded))
                             .multilineTextAlignment(.center)
                             .lineLimit(3)
                             .minimumScaleFactor(0.72)
@@ -256,7 +259,7 @@ struct DailyReviewView: View {
                         } else {
                             HStack(alignment: .firstTextBaseline, spacing: 12) {
                                 Text(current.english)
-                                    .font(.system(size: 32, weight: .semibold, design: .rounded))
+                                    .font(.system(size: reviewWordSize, weight: .semibold, design: .rounded))
                                     .multilineTextAlignment(.center)
                                     .lineLimit(3)
                                     .minimumScaleFactor(0.62)
@@ -275,7 +278,7 @@ struct DailyReviewView: View {
             } else {
                     HStack(alignment: .firstTextBaseline, spacing: 12) {
                         Text(current.english)
-                            .font(.system(size: 32, weight: .semibold, design: .rounded))
+                            .font(.system(size: reviewWordSize, weight: .semibold, design: .rounded))
                             .multilineTextAlignment(.center)
                             .lineLimit(3)
                             .minimumScaleFactor(0.62)
@@ -297,7 +300,7 @@ struct DailyReviewView: View {
                         .buttonStyle(.borderedProminent)
                     } else {
                         Text(current.chinese.isEmpty ? "（无中文）" : current.chinese)
-                            .font(.system(size: 21, weight: .regular))
+                            .font(.system(size: reviewSecondarySize, weight: .regular))
                             .foregroundStyle(.secondary)
                             .multilineTextAlignment(.center)
                             .lineSpacing(7)

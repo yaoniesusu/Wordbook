@@ -6,6 +6,7 @@ final class PersistenceController {
     private let backupURL: URL
     private let historyURL: URL
     private let dictionaryCacheURL: URL
+    private let undoStackURL: URL
     private let decoder = JSONDecoder()
     private let saveDelay: TimeInterval
     private let maxHistoryCount = 80
@@ -23,6 +24,7 @@ final class PersistenceController {
         backupURL = dir.appendingPathComponent("entries.backup.json")
         historyURL = dir.appendingPathComponent("ingest-history.json")
         dictionaryCacheURL = dir.appendingPathComponent("dictionary-cache.json")
+        undoStackURL = dir.appendingPathComponent("undo-stack.json")
         self.saveDelay = saveDelay
     }
 
@@ -190,6 +192,17 @@ final class PersistenceController {
     func deleteSnapshot(id: String) {
         let url = snapshotsDir.appendingPathComponent(id)
         try? FileManager.default.removeItem(at: url)
+    }
+
+    // MARK: - Undo Stack
+
+    func loadUndoStackData() -> Data? {
+        guard FileManager.default.fileExists(atPath: undoStackURL.path) else { return nil }
+        return try? Data(contentsOf: undoStackURL)
+    }
+
+    func saveUndoStackData(_ data: Data) {
+        try? data.write(to: undoStackURL, options: .atomic)
     }
 
     private func pruneSnapshots() {
