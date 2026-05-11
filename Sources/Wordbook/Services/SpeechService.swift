@@ -1,12 +1,15 @@
-import AppKit
+import AVFoundation
 
 enum SpeechService {
-    private static let synthesizer = NSSpeechSynthesizer()
+    private static let synthesizer = AVSpeechSynthesizer()
 
     static func speak(_ text: String) {
         if synthesizer.isSpeaking {
-            synthesizer.stopSpeaking()
+            synthesizer.stopSpeaking(at: .immediate)
         }
-        synthesizer.startSpeaking(text)
+        let utterance = AVSpeechUtterance(string: text)
+        utterance.voice = AVSpeechSynthesisVoice(language: "en-US")
+        utterance.rate = AVSpeechUtteranceDefaultSpeechRate
+        synthesizer.speak(utterance)
     }
 }

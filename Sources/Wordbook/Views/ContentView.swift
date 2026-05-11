@@ -391,7 +391,7 @@ private final class ReviewWindowPresenter: NSObject, NSWindowDelegate {
         .environmentObject(store)
 
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 720, height: 620),
+            contentRect: NSRect(x: 0, y: 0, width: 720, height: 560),
             styleMask: [.titled, .closable, .miniaturizable, .resizable],
             backing: .buffered,
             defer: false
@@ -400,15 +400,19 @@ private final class ReviewWindowPresenter: NSObject, NSWindowDelegate {
         window.contentViewController = NSHostingController(rootView: view)
         window.animationBehavior = .none
         window.isReleasedWhenClosed = false
-        window.minSize = NSSize(width: 620, height: 500)
-        recenter(window)
+        window.minSize = NSSize(width: 620, height: 300)
+        window.setFrameAutosaveName("DailyReviewWindow")
 
         window.delegate = self
         self.window = window
         window.alphaValue = 0
         NSApp.activate(ignoringOtherApps: true)
         window.makeKeyAndOrderFront(nil)
+        window.center()
         window.animator().alphaValue = 1
+        DispatchQueue.main.async {
+            window.center()
+        }
     }
 
     private func recenter(_ window: NSWindow) {
@@ -758,7 +762,7 @@ private struct OnboardingView: View {
                     icon: "calendar.badge.clock",
                     color: .orange,
                     title: "间隔重复复习",
-                    description: "基于 SM-2 算法，在遗忘临界点安排复习。支持正常、反向、拼写、挖空四种模式。"
+                    description: "基于 SM-2 算法，在遗忘临界点安排复习。选择题形式，自动评分。"
                 )
                 featureRow(
                     icon: "plus.circle",
