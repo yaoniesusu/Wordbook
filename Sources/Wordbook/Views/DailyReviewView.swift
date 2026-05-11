@@ -149,6 +149,7 @@ struct DailyReviewView: View {
         Button {
             selectOption(optIndex)
         } label: {
+            let style = optionStyle(for: optIndex)
             HStack(spacing: 10) {
                 Text(keyLabel(for: optIndex))
                     .font(.system(size: 13, weight: .semibold, design: .rounded))
@@ -162,11 +163,11 @@ struct DailyReviewView: View {
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 14)
-            .background(optionBackground(for: optIndex))
+            .background(style.background)
             .clipShape(RoundedRectangle(cornerRadius: AppTheme.Radius.medium, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: AppTheme.Radius.medium, style: .continuous)
-                    .strokeBorder(optionBorderColor(for: optIndex), lineWidth: 1.5)
+                    .strokeBorder(style.border, lineWidth: 1.5)
             }
         }
         .buttonStyle(.plain)
@@ -177,38 +178,21 @@ struct DailyReviewView: View {
         ["1", "2", "3", "4"][safe: index] ?? "\(index + 1)"
     }
 
-    private func optionBackground(for optIndex: Int) -> Color {
+    private func optionStyle(for optIndex: Int) -> (background: Color, border: Color) {
         guard let selected = selectedOptionIndex else {
-            return Color.primary.opacity(0.04)
+            return (Color.primary.opacity(0.04), Color.primary.opacity(0.08))
         }
         let correctChinese = batch[safe: index]?.chinese ?? ""
         let isThisCorrect = options[safe: optIndex] == correctChinese
 
         if optIndex == selected && isThisCorrect {
-            return Color.green.opacity(0.18)
+            return (Color.green.opacity(0.18), Color.green.opacity(0.5))
         } else if optIndex == selected && !isThisCorrect {
-            return Color.red.opacity(0.18)
-        } else if selectedOptionIndex != nil && isThisCorrect {
-            return Color.green.opacity(0.18)
+            return (Color.red.opacity(0.18), Color.red.opacity(0.5))
+        } else if isThisCorrect {
+            return (Color.green.opacity(0.18), Color.green.opacity(0.5))
         }
-        return Color.primary.opacity(0.04)
-    }
-
-    private func optionBorderColor(for optIndex: Int) -> Color {
-        guard let selected = selectedOptionIndex else {
-            return Color.primary.opacity(0.08)
-        }
-        let correctChinese = batch[safe: index]?.chinese ?? ""
-        let isThisCorrect = options[safe: optIndex] == correctChinese
-
-        if optIndex == selected && isThisCorrect {
-            return Color.green.opacity(0.5)
-        } else if optIndex == selected && !isThisCorrect {
-            return Color.red.opacity(0.5)
-        } else if selectedOptionIndex != nil && isThisCorrect {
-            return Color.green.opacity(0.5)
-        }
-        return Color.primary.opacity(0.08)
+        return (Color.primary.opacity(0.04), Color.primary.opacity(0.08))
     }
 
     // MARK: - Actions

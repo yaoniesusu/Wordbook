@@ -17,7 +17,7 @@ struct AppSettingsScene: View {
     @AppStorage(UserDefaultsKey.dailyReviewGoal.rawValue) private var dailyReviewGoal = 10
     @State private var showImporter = false
 
-    private let appVersion = "1.2.0"
+    private let appVersion = "1.2.1"
 
     var body: some View {
         content
